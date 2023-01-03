@@ -11,7 +11,7 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-#include "RTClib.h"
+#include <RTClib.h>
 
 // Pin Declaration
 #define relay1 25
@@ -40,8 +40,6 @@ DHT dht(DHTPIN, DHTTYPE);
 // RTC Declaration
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
-
-
 
 void buzz(int delayTime, int repeat)
 {
@@ -119,38 +117,50 @@ void setup()
   buzz(100, 3);
 }
 
-void loop()
+void rtcUpdate()
 {
-  // start milis program for feed vaariable
-
-  
-
   DateTime now = rtc.now(); // get the current time
-  // = = = = = = = = = = = = = variable feed = = = = = = = = = = = = = 
-  soilMoisture1Value = analogRead(soilMoisture1);
-  delay(500);
-  soilMoisture2Value = analogRead(soilMoisture2);
-  humidity = dht.readHumidity();
-  temperature = dht.readTemperature();
-  heatIndex = dht.computeHeatIndex(temperature, humidity, false);
   timeNow = String(now.hour(), DEC) + ":" + String(now.minute(), DEC) + ":" + String(now.second(), DEC);
   dateNow = String(now.day(), DEC) + "/" + String(now.month(), DEC) + "/" + String(now.year(), DEC);
+}
 
-  // = = = = = = = = = = = = = DHT Falidation = = = = = = = = = = = = = 
-  if (isnan(humidity) || isnan(temperature))
+int sensorStartTime = 0;
+void sensorUpdate()
+{
+  // = = = = = = = = = = = = = Sensor Update = = = = = = = = = = = = =
+  unsigned long sensorTimeNow = millis();
+  if (sensorTimeNow - sensorStartTime >= 1000)
   {
-    Serial.println(F("Failed to read from DHT sensor!"));
-    lcdPrint("Failed to read", "from DHT sensor!");
-    return;
+    delay(1000);
+    soilMoisture1Value = analogRead(soilMoisture1);
+    delay(1000);
+    soilMoisture2Value = analogRead(soilMoisture2);
+    sensorStartTime = sensorTimeNow;
+    humidity = dht.readHumidity();
+    temperature = dht.readTemperature();
+    heatIndex = dht.computeHeatIndex(temperature, humidity, false);
+    if (isnan(humidity) || isnan(temperature))
+    {
+      Serial.println(F("Failed to read from DHT sensor!"));
+      lcdPrint("Failed to read", "from DHT sensor!");
+      return;
+    }
+    soilMoisture1Value = analogRead(soilMoisture1);
+    delay(1000);
+    soilMoisture2Value = analogRead(soilMoisture2);
   }
+}
 
+void loop()
+{
+  rtcUpdate();
+  sensorUpdate();
   serialDataPrint();
-  delay(1000);
+
   // = = = = = = = = = = = = = LCD Print = = = = = = = = = = = = =
   // lcdPrint("T: " + String(temperature) + "C", "H: " + String(humidity) + "%");
   // delay(2000);
   // lcdPrint("soil1: " + String(soilMoisture1Value), "soil2: " + String(soilMoisture2Value));
   // delay(200);
-  // lcdPrint("Time: " + timeNow, "Date: " + dateNow);
-  // delay(2000);
+  lcdPrint("Time: " + timeNow, "1:" + String(soilMoisture1Value) + " | 2:" + String(soilMoisture2Value));
 }
