@@ -115,7 +115,7 @@ void setup() {
   }
   Detik = 0;
 
-  client.subscribe("ferads/NF01");
+  client.subscribe("bitanicv2/BT01");
 }
 
 void loop() {
