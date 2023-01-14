@@ -17,21 +17,6 @@
 #include <PubSubClient.h>
 #include <WiFiManager.h>
 
-// WiFi Setting
-const char* ssid = "Setting";
-const char* password = "admin1234";
-const char* mqttServer = "broker.hivemq.com";
-const int mqttPort = 1883;
-const char* mqttUser = "";
-const char* mqttPassword = "";
-
-WiFiClient wifiClient;
-PubSubClient client(wifiClient);
-
-// Publis Topic
-const char* dataTopic = "bitanicv2/data";
-// Subscribe Topic
-const char* control = "bitanicv2/control";
 
 // Pin Declaration
 #define relay1 25
@@ -61,31 +46,6 @@ DHT dht(DHTPIN, DHTTYPE);
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
 
-// Class untuk mengeksekusi program secara multiprocessing
-class Task
-{
-public:
-  Task(unsigned long interval, void (*callback)())
-  {
-    this->interval = interval;
-    this->callback = callback;
-    this->nextRun = millis() + interval;
-  }
-
-  void update()
-  {
-    if (millis() >= nextRun)
-    {
-      nextRun = millis() + interval;
-      callback();
-    }
-  }
-
-private:
-  unsigned long interval;
-  unsigned long nextRun;
-  void (*callback)();
-};
 
 
 void buzz(int delayTime, int repeat)
@@ -123,40 +83,10 @@ void lcdPrint(String text1, String text2)
   lcd.print(text2);
 }
 
-void reconnect() {
-  while (!client.connected()) {
-    if (client.connect("arduinoClientABC123")) {
-      client.subscribe(control);
-    } else {
-      delay(1000);
-    }
-  }
-}
-
-void callback(char* topic, byte* payload, unsigned int length) {
-  String message;
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  Serial.println("Received: " + message);
-}
-
-void sendData(const char* topic, const char* payload) {
-  client.publish(topic, payload);
-  Serial.println("Sent: " + String(payload));
-}
-
 void setup()
 {
   Serial.begin(115200);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-  client.setServer(mqttServer, mqttPort);
-  client.setCallback(callback);
+
   // pinMode declaration
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
@@ -194,15 +124,12 @@ void setup()
   buzz(100, 3);
 }
 
-// task untuk mencetak hello world pada serial monitor per 10 detik sekali
-Task task1(10000, []() {
-  Serial.println("Hello World!");
-});
-Task task2(1000, []() {
-  Serial.println("Hello");
-});
+void loop()
+{
+  // start milis program for feed vaariable
 
-Task dataUpdate(3000,[](){
+  
+
   DateTime now = rtc.now(); // get the current time
   // = = = = = = = = = = = = = variable feed = = = = = = = = = = = = = 
   soilMoisture1Value = analogRead(soilMoisture1);
@@ -213,9 +140,16 @@ Task dataUpdate(3000,[](){
   heatIndex = dht.computeHeatIndex(temperature, humidity, false);
   timeNow = String(now.hour(), DEC) + ":" + String(now.minute(), DEC) + ":" + String(now.second(), DEC);
   dateNow = String(now.day(), DEC) + "/" + String(now.month(), DEC) + "/" + String(now.year(), DEC);
-});
 
-Task lcdUpdate(100,[](){
+  // = = = = = = = = = = = = = DHT Falidation = = = = = = = = = = = = = 
+  if (isnan(humidity) || isnan(temperature))
+  {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    lcdPrint("Failed to read", "from DHT sensor!");
+    return;
+  }
+
+  serialDataPrint();
   // = = = = = = = = = = = = = LCD Print = = = = = = = = = = = = =
   lcdPrint("T: " + String(temperature) + "C", "H: " + String(humidity) + "%");
   delay(2000);
@@ -223,31 +157,4 @@ Task lcdUpdate(100,[](){
   delay(2000);
   lcdPrint("Time: " + timeNow, "Date: " + dateNow);
   delay(2000);
-});
-
-Task mqttUpdate(5000,[](){
-  // Kirim data JSON ke MQTT
-  DynamicJsonDocument doc(1024);
-  doc["soil1"] = soilMoisture1Value;
-  doc["soil2"] = soilMoisture2Value;
-  doc["temperature"] = temperature;
-  doc["humidity"] = humidity;
-  doc["heatIndex"] = heatIndex;
-  doc["time"] = timeNow;
-  doc["date"] = dateNow;
-  String output;
-  serializeJson(doc, output);
-  sendData(dataTopic, output.c_str());
-});
-
-void loop()
-{
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-  
-  dataUpdate.update();
-  lcdUpdate.update();
-  mqttUpdate.update();
 }
